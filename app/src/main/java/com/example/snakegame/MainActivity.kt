@@ -1,13 +1,17 @@
 package com.example.snakegame
 
 import android.app.AlertDialog
+import android.app.Dialog
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.View
+import android.view.Window
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -21,6 +25,8 @@ import com.example.snakegame.databinding.ActivitySnakeGameBinding
 import com.example.snakegame.presentation.SnakeGameView
 import com.example.snakegame.presentation.SnakeViewModel
 import com.google.android.gms.ads.AdError
+import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.FullScreenContentCallback
@@ -28,6 +34,8 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import com.google.android.gms.ads.nativead.NativeAd
+import com.google.android.gms.ads.nativead.NativeAdView
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import kotlin.math.abs
@@ -41,6 +49,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adRequest: AdRequest
     private var mInterstitialAd: InterstitialAd ?= null
     private var mRewardedAd: RewardedAd ?= null
+    private lateinit var nativeAd: NativeAd
+    private var isNativeAdLoaded = false
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         //Khởi tạo interstitial ad
         loadInterstitialAd()
         loadRewardAd()
+        loadNativeAd()
         adView.loadAd(adRequest)
         viewModel = ViewModelProvider(this)[SnakeViewModel::class.java]
         setupGame()
@@ -111,6 +123,7 @@ class MainActivity : AppCompatActivity() {
         Handler(Looper.getMainLooper()).postDelayed({
             if(viewModel.isPaused.value == false) binding.gameView.resumeGame()
         },1500)
+        showInterstitialAd()
     }
     private fun updateLevel(level: GameMode) {
         val levelText = when(level) {
@@ -121,15 +134,80 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showGameOverDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Trò chơi kết thúc")
-            .setMessage("Điểm của bạn: ${viewModel.score.value}")
-            .setPositiveButton("Chơi lại") { _, _ -> showInterstitialAd()}
-            .setNegativeButton("Thoát") { _, _ -> finish() }
-            .setNeutralButton("Xem ads để thêm mạng") { _, _ -> showRewardedAd() }
-            .setCancelable(false)
-            .show()
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setCancelable(false)
+        dialog.setContentView(R.layout.dialog_game_over)
+        //Set điểm số
+        val scoreTv = dialog.findViewById<TextView>(R.id.score_text_view_dialog)
+        scoreTv.text = "Điểm: ${viewModel.score.value}"
+        val playAgainBtn = dialog.findViewById<Button>(R.id.play_again_button)
+        val exitBtn = dialog.findViewById<Button>(R.id.exit_button)
+        val watchAdButton  = dialog.findViewById<Button>(R.id.watch_ad_button)
+
+        playAgainBtn.setOnClickListener {
+            dialog.dismiss()
+            showInterstitialAd()
+        }
+        exitBtn.setOnClickListener {
+            dialog.dismiss()
+            finish()
+        }
+        watchAdButton.setOnClickListener {
+            dialog.dismiss()
+            showRewardedAd()
+        }
+        if(isNativeAdLoaded){
+            val adView = dialog.findViewById<NativeAdView>(R.id.native_ad_view)
+            showNativeAdView(nativeAd,adView)
+            adView.visibility = View.VISIBLE
+        }
+        dialog.show()
+        loadNativeAd()
+
     }
+
+    private fun showNativeAdView(nativeAd: NativeAd, adView: NativeAdView) {
+        //đặt mediaView
+        adView.mediaView = adView.findViewById(R.id.ad_media)
+        // Đặt các view khác
+        adView.headlineView = adView.findViewById(R.id.ad_headline)
+        adView.bodyView = adView.findViewById(R.id.ad_body)
+        adView.callToActionView = adView.findViewById(R.id.ad_call_to_action)
+        adView.iconView = adView.findViewById(R.id.ad_icon)
+        adView.priceView = adView.findViewById(R.id.ad_price)
+        adView.starRatingView = adView.findViewById(R.id.ad_stars)
+        adView.storeView = adView.findViewById(R.id.ad_store)
+        adView.advertiserView = adView.findViewById(R.id.ad_advertiser)
+        // Điền nội dung vào các view
+        (adView.headlineView as TextView).text = nativeAd.headline
+        adView.mediaView?.mediaContent = nativeAd.mediaContent
+
+        // Body
+        if (nativeAd.body == null) {
+            adView.bodyView?.visibility = View.INVISIBLE
+        } else {
+            adView.bodyView?.visibility = View.VISIBLE
+            (adView.bodyView as TextView).text = nativeAd.body
+        }
+        // Call to action
+        if (nativeAd.callToAction == null) {
+            adView.callToActionView?.visibility = View.INVISIBLE
+        } else {
+            adView.callToActionView?.visibility = View.VISIBLE
+            (adView.callToActionView as Button).text = nativeAd.callToAction
+        }
+        // Icon
+        if (nativeAd.icon == null) {
+            adView.iconView?.visibility = View.GONE
+        } else {
+            (adView.iconView as ImageView).setImageDrawable(nativeAd.icon?.drawable)
+            adView.iconView?.visibility = View.VISIBLE
+        }
+        // Đặt native ad vào view
+        adView.setNativeAd(nativeAd)
+    }
+
     private fun showInterstitialAd(){
         if (mInterstitialAd != null) {
             mInterstitialAd?.fullScreenContentCallback = object : FullScreenContentCallback() {
@@ -192,6 +270,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         )
+    }
+    //Tải native ad
+    private fun loadNativeAd(){
+        val adLoader = AdLoader.Builder(this, "ca-app-pub-3940256099942544/2247696110")
+            .forNativeAd { ad:NativeAd ->
+                nativeAd = ad
+                isNativeAdLoaded = true
+            }
+            .withAdListener(object : AdListener() {
+                override fun onAdFailedToLoad(p0: LoadAdError) {
+                    isNativeAdLoaded = false
+                    Log.e("MainActivity", "Không thể tải được ad: $p0")
+                }
+            }).build()
+        adLoader.loadAd(adRequest)
     }
     override fun onPause() {
         super.onPause()

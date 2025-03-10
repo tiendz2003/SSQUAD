@@ -8,6 +8,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.OnLifecycleEvent
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.example.snakegame.ads.AppOpenManager
 import com.google.android.gms.ads.MobileAds
@@ -16,27 +17,34 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 
-class MyApplication: Application(), Application.ActivityLifecycleCallbacks  {
+class MyApplication: Application(), Application.ActivityLifecycleCallbacks,LifecycleObserver   {
     private lateinit var appOpenManager: AppOpenManager
     private var currentActivity: Activity? = null
     private var isAppInForeground = false
     override fun onCreate() {
         super.onCreate()
         // Chạy Mobile Ads SDK trên một luồng nền để tránh chặn Main Thread
-        CoroutineScope(Dispatchers.IO).launch {
+      /*  CoroutineScope(Dispatchers.IO).launch {
             MobileAds.initialize(this@MyApplication) {}
-        }
+        }*/
         registerActivityLifecycleCallbacks(this)
         // Khởi tạo App Open Ad Manager
         appOpenManager = AppOpenManager()
         appOpenManager.loadAd(this)
 
         // Lắng nghe sự kiện Lifecycle để hiển thị quảng cáo khi app vào foreground
-    }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
 
+    }
+    @OnLifecycleEvent(Lifecycle.Event.ON_START)
+    fun onMoveToForeground() {
+        currentActivity?.let {
+            appOpenManager.showAdIfAvailable(it)
+        }
+    }
     /** Hiển thị quảng cáo khi ứng dụng được đưa lên foreground */
     fun showAdIfAvailable() {
-        if (currentActivity != null && isAppInForeground) {
+        if (currentActivity != null) {
             Log.d("MyApplication", "Hiển thị quảng cáo cho: ${currentActivity}")
             appOpenManager.showAdIfAvailable(currentActivity!!)
         }
@@ -52,9 +60,9 @@ class MyApplication: Application(), Application.ActivityLifecycleCallbacks  {
         Log.d("MyApplication", "Started")
         Log.d("MyApplication", "App vào foreground: $activity")
         currentActivity = activity
-        isAppInForeground = true
+       /* isAppInForeground = true
         // Gọi showAdIfAvailable() ngay khi app vào foreground
-        showAdIfAvailable()
+        showAdIfAvailable()*/
     }
 
     override fun onActivityResumed(activity: Activity) {
@@ -67,9 +75,9 @@ class MyApplication: Application(), Application.ActivityLifecycleCallbacks  {
     }
 
     override fun onActivityStopped(activity: Activity) {
-        if (activity == currentActivity) {
+      /*  if (activity == currentActivity) {
             isAppInForeground = false
-        }
+        }*/
     }
     override fun onActivitySaveInstanceState(
         activity: Activity,

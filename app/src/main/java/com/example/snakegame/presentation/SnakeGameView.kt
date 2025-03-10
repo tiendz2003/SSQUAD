@@ -118,8 +118,14 @@ class SnakeGameView @JvmOverloads constructor(
             handleCollision()
             return
         }
+
         // Kiểm tra va chạm với chính mình
         if (snake.contains(newHead)) {
+            handleCollision()
+            return
+        }
+        //Kiêếm tra va chạm vs vật cản
+        if(obstacles.contains(newHead)){
             handleCollision()
             return
         }
